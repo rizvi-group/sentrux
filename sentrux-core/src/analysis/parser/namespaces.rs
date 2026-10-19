@@ -9,6 +9,7 @@
 //!   - extension methods declared, qualified by namespace
 //!   - using directives (plain, `static`, `global`, aliased)
 //!   - names referenced (identifiers and dotted names), minus declaration names
+//!   - member names invoked, the only names matched against extension methods
 //!
 //! Fully data-driven by `[semantics.namespaces]` in plugin.toml.
 
@@ -30,6 +31,7 @@ pub(crate) fn extract_namespace_info(root: Node<'_>, content: &[u8], cfg: &Names
         ext: BTreeSet::new(),
         usings: Vec::new(),
         refs: BTreeSet::new(),
+        calls: BTreeSet::new(),
     };
     w.walk_children(root, &Scope::default(), 0);
     NamespaceInfo {
@@ -38,6 +40,7 @@ pub(crate) fn extract_namespace_info(root: Node<'_>, content: &[u8], cfg: &Names
         ext: w.ext.into_iter().collect(),
         usings: w.usings,
         refs: w.refs.into_iter().collect(),
+        calls: w.calls.into_iter().collect(),
     }
 }
 
@@ -58,6 +61,7 @@ struct Walker<'a> {
     ext: BTreeSet<String>,
     usings: Vec<NamespaceUsing>,
     refs: BTreeSet<String>,
+    calls: BTreeSet<String>,
 }
 
 fn join(prefix: &str, name: &str) -> String {
@@ -155,6 +159,12 @@ impl<'a> Walker<'a> {
             }
         }
 
+        if has(&cfg.invocation_kinds, kind) {
+            if let Some(name) = node.child_by_field_name("function").and_then(|f| self.invoked_name(f)) {
+                self.calls.insert(name);
+            }
+        }
+
         if has(&cfg.qualified_kinds, kind) {
             let text = clean_name(self.text(node));
             if is_dotted_name(&text) {
@@ -204,6 +214,15 @@ impl<'a> Walker<'a> {
                 self.walk(child, scope, depth + 1);
             }
         }
+    }
+
+    /// The member an invocation calls: the last segment of `a.b.Name` or
+    /// `Name`, without type arguments (`Name<T>`).
+    fn invoked_name(&self, function: Node<'_>) -> Option<String> {
+        let target = function.child_by_field_name("name").unwrap_or(function);
+        let text = clean_name(self.text(target));
+        let name = text.split('<').next().unwrap_or("").rsplit('.').next().unwrap_or("").trim().to_string();
+        (!name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_')).then_some(name)
     }
 
     /// Extension method: first parameter starts with the configured prefix (`this `).

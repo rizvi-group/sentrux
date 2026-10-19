@@ -450,6 +450,11 @@ pub struct NamespaceConfig {
     /// Text the first parameter of an extension method starts with. C#: `"this "`.
     pub extension_param_prefix: String,
 
+    /// Invocation node kinds. Their `function` field names the member called;
+    /// only called names can reference an extension method.
+    /// C#: `["invocation_expression"]`.
+    pub invocation_kinds: Vec<String>,
+
     /// Suffix the language implicitly appends to attribute names.
     /// C#: `"Attribute"` (`[Fact]` names `FactAttribute`).
     pub attribute_suffix: String,

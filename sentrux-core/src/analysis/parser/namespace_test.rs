@@ -76,6 +76,28 @@ namespace Acme.Application
     }
 
     #[test]
+    fn csharp_invoked_member_names_are_calls() {
+        let ns = ns_of(r#"
+namespace Acme.App
+{
+    public sealed class Waiter
+    {
+        public Caller Caller { get; }
+
+        public void Run(Options options)
+        {
+            var c = options.Caller();
+            Schedule<int>(c);
+            Acme.Infra.Hosting.Start();
+        }
+    }
+}
+"#);
+        assert_eq!(ns.calls, vec!["Caller", "Schedule", "Start"]);
+        assert!(ns.refs.contains(&"Caller".to_string()));
+    }
+
+    #[test]
     fn csharp_using_forms() {
         let ns = ns_of(SAMPLE);
         assert_eq!(

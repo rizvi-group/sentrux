@@ -194,7 +194,9 @@ fn resolve_file<'a>(info: &NamespaceInfo, scope: &FileScope<'_>, idx: &Namespace
                         let attr = format!("{r}{attribute_suffix}");
                         add(types.and_then(|m| m.get(attr.as_str())));
                     }
-                    add(idx.ext.get(ns.as_str()).and_then(|m| m.get(r.as_str())));
+                    if info.calls.iter().any(|c| c == r) {
+                        add(idx.ext.get(ns.as_str()).and_then(|m| m.get(r.as_str())));
+                    }
                 }
             }
             Some(_) => {
@@ -274,6 +276,7 @@ mod tests {
             types: strings(types),
             ext: Vec::new(),
             usings,
+            calls: strings(refs),
             refs: strings(refs),
         };
         let sa = StructuralAnalysis {
@@ -434,6 +437,20 @@ mod tests {
             resolve(&files),
             vec![edge("App/Startup.cs", "Infra/AuditedAttribute.cs"), edge("App/Startup.cs", "Infra/Registration.cs")]
         );
+    }
+
+    #[test]
+    fn extension_methods_resolve_only_when_called() {
+        let mut ext_file = cs("Infra/Registration.cs", &["Acme.Infra"], &["Acme.Infra.Registration"], vec![], &[]);
+        if let Some(ns) = ext_file.sa.as_mut().and_then(|sa| sa.ns.as_mut()) {
+            ns.ext = vec!["Acme.Infra.Caller".to_string()];
+        }
+        // A property named like the extension method is a reference, not a call.
+        let mut app = cs("App/Waiter.cs", &["Acme.App"], &["Acme.App.Waiter"], vec![using("Acme.Infra")], &["Caller"]);
+        if let Some(ns) = app.sa.as_mut().and_then(|sa| sa.ns.as_mut()) {
+            ns.calls = Vec::new();
+        }
+        assert!(resolve(&[app, ext_file]).is_empty());
     }
 
     #[test]

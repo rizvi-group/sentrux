@@ -96,6 +96,12 @@ pub struct NamespaceInfo {
     /// dotted names ("Domain.Order"). Declaration names are excluded.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refs: Vec<String>,
+    /// Member names this file invokes (`x.Name(...)`, `Name(...)`). An
+    /// extension method is only referenced by a call, so only these names
+    /// are matched against extension methods: a property or local that shares
+    /// an extension method's name is not a dependency on it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<String>,
 }
 
 /// One using directive: `[global] using [static] [Alias =] Target;`.

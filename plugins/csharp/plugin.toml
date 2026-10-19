@@ -55,6 +55,7 @@ reference_kinds = ["identifier"]
 qualified_kinds = ["qualified_name", "member_access_expression"]
 method_kinds = ["method_declaration"]
 extension_param_prefix = "this "
+invocation_kinds = ["invocation_expression"]
 attribute_suffix = "Attribute"
 
 [semantics.import_ast]
