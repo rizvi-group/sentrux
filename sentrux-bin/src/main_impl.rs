@@ -609,7 +609,8 @@ fn gate_compare(
 // Metrics
 // ---------------------------------------------------------------------------
 
-/// Print root-cause scores, raw values and module data as JSON. Returns exit code.
+/// Print root-cause scores, raw values, module data and the best achievable
+/// modularity as JSON. Returns exit code.
 ///
 /// Modularity uses the same edge set and module boundaries as the score itself:
 /// import edges (minus module declarations) plus call edges, deduplicated, and
@@ -648,8 +649,12 @@ fn metrics_json(
     use core::path_utils::module_of;
     use std::collections::{BTreeMap, BTreeSet};
 
+    let dep_edges: Vec<core::types::ImportEdge> = snapshot.import_graph.iter()
+        .filter(|e| !metrics::types::is_mod_declaration_edge(e))
+        .cloned()
+        .collect();
     let mut edges: BTreeSet<(&str, &str)> = BTreeSet::new();
-    for e in snapshot.import_graph.iter().filter(|e| !metrics::types::is_mod_declaration_edge(e)) {
+    for e in &dep_edges {
         edges.insert((e.from_file.as_str(), e.to_file.as_str()));
     }
     for e in &snapshot.call_graph {
@@ -666,6 +671,7 @@ fn metrics_json(
         module_files.entry(module_of(to)).or_default();
     }
     let intra = edges.iter().filter(|(a, b)| module_of(a) == module_of(b)).count();
+    let optimum = metrics::modularity_optimum::compute_modularity_optimum(&dep_edges, &snapshot.call_graph, &files);
 
     let raw = &health.root_cause_raw;
     let s = &health.root_cause_scores;
@@ -690,6 +696,12 @@ fn metrics_json(
             "modules": module_files.len(),
             "edges": edges.len(),
             "intra_module_edges": intra,
+        },
+        // Best Q over partitions that keep each module inside one top-level directory
+        // (directed Louvain; see metrics::modularity_optimum).
+        "optimum": {
+            "modularity_q": optimum.modularity_q,
+            "modules": optimum.modules,
         },
         "module_files": module_files,
         "cycles": health.circular_dep_files,
