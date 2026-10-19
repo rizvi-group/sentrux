@@ -25,7 +25,7 @@ capabilities = ["functions", "classes", "imports"]
 dot_is_module_separator = true
 import_extractor = ""
 base_class_extractor = "generic"
-base_class_node_kinds = ["superclass", "super_interfaces", "type_list", "extends_type_clause", "class_type", "delegation_specifiers"]
+base_class_node_kinds = ["base_list", "superclass", "super_interfaces", "type_list", "extends_type_clause", "class_type", "delegation_specifiers"]
 abstract_keywords = ["abstract"]
 is_executable = true
 public_keywords = ["public"]
@@ -44,6 +44,18 @@ source_root = "src"
 [semantics.project]
 manifest_files = ["*.csproj"]
 source_dirs = ["src"]
+
+[semantics.namespaces]
+declaration_kinds = ["namespace_declaration", "file_scoped_namespace_declaration"]
+type_declaration_kinds = ["class_declaration", "struct_declaration", "interface_declaration", "enum_declaration", "record_declaration", "record_struct_declaration", "delegate_declaration"]
+using_kinds = ["using_directive"]
+static_keyword = "static"
+global_keyword = "global"
+reference_kinds = ["identifier"]
+qualified_kinds = ["qualified_name", "member_access_expression"]
+method_kinds = ["method_declaration"]
+extension_param_prefix = "this "
+attribute_suffix = "Attribute"
 
 [semantics.import_ast]
 strategy = "scoped_path"

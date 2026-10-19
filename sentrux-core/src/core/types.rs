@@ -63,6 +63,55 @@ pub struct StructuralAnalysis {
     /// Computed during parse to replace tokei dependency.
     #[serde(skip)]
     pub comment_lines: Option<u32>,
+    /// Namespace-scoped symbols for languages whose imports name namespaces
+    /// rather than files (C#). Filled only when the language profile has a
+    /// `[semantics.namespaces]` section.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ns: Option<NamespaceInfo>,
+}
+
+/// Namespace declarations, usings and type references of one file.
+///
+/// In C# a `using A.B;` names a namespace, which may be spread across any
+/// number of files and folders. The resolver joins these per-file facts
+/// across the project: a file depends on the files that declare the types it
+/// references through one of its visible namespaces.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NamespaceInfo {
+    /// Namespaces declared in this file (fully qualified, e.g. "Acme.Domain").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decl: Vec<String>,
+    /// Types declared in this file, fully qualified ("Acme.Domain.Order").
+    /// Nested types are qualified by their outer type ("Acme.Domain.Order.Line").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<String>,
+    /// Extension methods declared in this file, qualified by namespace
+    /// ("Acme.Domain.AddDomain"). A `using Acme.Domain;` brings them into scope.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ext: Vec<String>,
+    /// Using directives of this file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub usings: Vec<NamespaceUsing>,
+    /// Names referenced in this file: simple identifiers ("Order") and
+    /// dotted names ("Domain.Order"). Declaration names are excluded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<String>,
+}
+
+/// One using directive: `[global] using [static] [Alias =] Target;`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamespaceUsing {
+    /// Namespace or type named by the directive ("Acme.Domain").
+    pub target: String,
+    /// Alias name for `using Alias = Target;`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    /// `using static Type;` — brings a type's members into scope.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_static: bool,
+    /// `global using ...;` — applies to every file in the same project.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_global: bool,
 }
 
 /// Information about a single function or method.

@@ -8,6 +8,7 @@ mod ast_import_walker;
 mod captures;
 pub mod imports;
 mod lang_extractors;
+mod namespaces;
 mod strings;
 
 #[cfg(test)]
@@ -16,6 +17,8 @@ mod tests;
 mod tests2;
 #[cfg(test)]
 mod ast_import_test;
+#[cfg(test)]
+mod namespace_test;
 
 
 use super::lang_registry;
@@ -270,6 +273,7 @@ impl ExtractionState {
             co: if module_calls.is_empty() { None } else { Some(module_calls) },
             tags: if self.tags.is_empty() { None } else { Some(self.tags) },
             comment_lines: None, // Filled later by parse_file_from_content
+            ns: None,            // Filled by extract_with_queries when configured
         }
     }
 }
@@ -299,7 +303,12 @@ pub(crate) fn extract_with_queries(
     }
 
     state.post_process_imports(content, lang);
-    state.into_structural_analysis()
+    let mut sa = state.into_structural_analysis();
+    let ns_cfg = &lang_registry::profile(lang).semantics.namespaces;
+    if ns_cfg.is_enabled() {
+        sa.ns = Some(namespaces::extract_namespace_info(tree.root_node(), content, ns_cfg));
+    }
+    sa
 }
 
 

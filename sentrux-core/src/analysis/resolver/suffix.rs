@@ -108,7 +108,8 @@ pub(crate) fn resolve_path_imports_ref(files: &[&FileNode], scan_root: Option<&P
     }
     let t_suffix = t0.elapsed();
 
-    let edges = resolve_tier2_imports(files, &known_files, &project_map, &suffix_index, &exts, &path_aliases);
+    let mut edges = resolve_tier2_imports(files, &known_files, &project_map, &suffix_index, &exts, &path_aliases);
+    edges.extend(super::namespace::resolve_namespace_imports(files, &project_map));
     let t_total = t0.elapsed();
 
     eprintln!(
@@ -171,6 +172,10 @@ fn resolve_tier2_imports(
             };
             // Per-file env: directory_is_package comes from the file's language profile (TOML)
             let profile = crate::analysis::lang_registry::profile(&file.lang);
+            // Namespace imports name no file; resolve_namespace_imports handles them.
+            if profile.semantics.namespaces.is_enabled() {
+                return Vec::new();
+            }
             let env = ResolveEnv {
                 suffix_index, known_files, exts,
                 directory_is_package: profile.semantics.project.directory_is_package,

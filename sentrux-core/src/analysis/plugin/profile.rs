@@ -224,6 +224,10 @@ pub struct LanguageSemantics {
     #[serde(default)]
     pub resolver: ResolverConfig,
 
+    /// Namespace-based import resolution (C#). Empty = disabled.
+    #[serde(default)]
+    pub namespaces: NamespaceConfig,
+
     // ── Complexity (AST-based) ──
 
     /// AST node kinds for complexity counting.
@@ -399,6 +403,62 @@ impl Default for ProjectConfig {
             directory_is_package: false,
             implicit_module: false,
         }
+    }
+}
+
+/// Namespace-based import resolution — for languages where an import names a
+/// namespace that spans many files (C# `using A.B;`), not a file path.
+///
+/// The parser records, per file, the namespaces and types it declares, its
+/// using directives and the names it references. The resolver then links a
+/// file to the files declaring the types it references through a namespace
+/// visible to it (its own namespace and parents, its usings, the project's
+/// global usings). An unused `using` produces no edge.
+///
+/// Enabled when `declaration_kinds` is non-empty.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct NamespaceConfig {
+    /// Namespace declaration node kinds. A kind whose node has no `body`
+    /// field is file-scoped: it applies to the following siblings.
+    /// C#: `["namespace_declaration", "file_scoped_namespace_declaration"]`.
+    pub declaration_kinds: Vec<String>,
+
+    /// Type declaration node kinds (their `name` field is the type name).
+    /// C#: `["class_declaration", "struct_declaration", "interface_declaration", ...]`.
+    pub type_declaration_kinds: Vec<String>,
+
+    /// Using/import directive node kinds. C#: `["using_directive"]`.
+    pub using_kinds: Vec<String>,
+
+    /// Keyword tokens inside a using directive marking it static / global.
+    /// C#: `"static"`, `"global"`.
+    pub static_keyword: String,
+    pub global_keyword: String,
+
+    /// Leaf node kinds whose text may name a type. C#: `["identifier"]`.
+    pub reference_kinds: Vec<String>,
+
+    /// Node kinds for dotted names. Recorded whole when the text is a plain
+    /// dotted identifier chain. C#: `["qualified_name", "member_access_expression"]`.
+    pub qualified_kinds: Vec<String>,
+
+    /// Method declaration node kinds, checked for extension methods.
+    /// C#: `["method_declaration"]`.
+    pub method_kinds: Vec<String>,
+
+    /// Text the first parameter of an extension method starts with. C#: `"this "`.
+    pub extension_param_prefix: String,
+
+    /// Suffix the language implicitly appends to attribute names.
+    /// C#: `"Attribute"` (`[Fact]` names `FactAttribute`).
+    pub attribute_suffix: String,
+}
+
+impl NamespaceConfig {
+    /// Whether namespace-based resolution is configured for this language.
+    pub fn is_enabled(&self) -> bool {
+        !self.declaration_kinds.is_empty()
     }
 }
 
@@ -624,6 +684,7 @@ impl Default for LanguageSemantics {
             import_ast: ImportAstConfig::default(),
             project: ProjectConfig::default(),
             resolver: ResolverConfig::default(),
+            namespaces: NamespaceConfig::default(),
             hash_is_comment: false,
             has_triple_quote_strings: false,
             package_index_files: Vec::new(),

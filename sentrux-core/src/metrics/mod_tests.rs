@@ -291,7 +291,7 @@ mod tests {
                 cls: None,
                 imp: None,
                 co: None,
-                tags: None, comment_lines: None,
+                tags: None, comment_lines: None, ns: None,
             }),
             children: None,
         };

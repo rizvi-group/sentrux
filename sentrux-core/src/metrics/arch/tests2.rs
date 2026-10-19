@@ -119,7 +119,7 @@ fn make_file_with_classes(path: &str, classes: Vec<ClassInfo>) -> FileNode {
             cls: Some(classes),
             imp: None,
             co: None,
-            tags: None, comment_lines: None,
+            tags: None, comment_lines: None, ns: None,
         }),
         children: None,
     }
