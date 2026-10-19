@@ -210,7 +210,7 @@ static MOD_DECL_FILES: std::sync::LazyLock<std::collections::HashSet<String>> =
 /// Is this edge a module declaration (structural containment, not a real dependency)?
 /// Examples: Rust `mod xxx;`, Python `__init__.py` re-exports.
 /// Kept for coupling/cohesion but excluded from cycle/god_file/depth metrics.
-pub(crate) fn is_mod_declaration_edge(edge: &crate::core::types::ImportEdge) -> bool {
+pub fn is_mod_declaration_edge(edge: &crate::core::types::ImportEdge) -> bool {
     let from_name = edge.from_file.rsplit('/').next().unwrap_or(&edge.from_file);
     if !MOD_DECL_FILES.contains(from_name) {
         return false;

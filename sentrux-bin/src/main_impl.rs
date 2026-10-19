@@ -84,6 +84,17 @@ enum Command {
         path: String,
     },
 
+    /// Print the root-cause scores and the module graph as JSON
+    Metrics {
+        /// Also list every file-to-file edge with its modules
+        #[arg(long)]
+        edges: bool,
+
+        /// Directory to measure
+        #[arg(default_value = ".")]
+        path: String,
+    },
+
     /// Open the GUI with a pre-loaded directory
     Scan {
         /// Directory to visualize
@@ -204,6 +215,9 @@ pub fn run() -> eframe::Result<()> {
         }
         Some(Command::Gate { save, path }) => {
             std::process::exit(run_gate(&path, save));
+        }
+        Some(Command::Metrics { edges, path }) => {
+            std::process::exit(run_metrics(&path, edges));
         }
         Some(Command::Mcp) => {
             app::mcp_server::run_mcp_server(None);
@@ -589,6 +603,117 @@ fn gate_compare(
         println!("\n✓ No degradation detected");
         0
     }
+}
+
+// ---------------------------------------------------------------------------
+// Metrics
+// ---------------------------------------------------------------------------
+
+/// Print root-cause scores, raw values and module data as JSON. Returns exit code.
+///
+/// Modularity uses the same edge set and module boundaries as the score itself:
+/// import edges (minus module declarations) plus call edges, deduplicated, and
+/// `module_of` for every code file. So `modules` is the k in Q's ceiling 1 - 1/k.
+fn run_metrics(path: &str, with_edges: bool) -> i32 {
+    let root = std::path::Path::new(path);
+    if !root.is_dir() {
+        eprintln!("Error: not a directory: {path}");
+        return 1;
+    }
+
+    eprintln!("Scanning {path}...");
+    let result = match analysis::scanner::scan_directory(
+        path, None, None,
+        &cli_scan_limits(),
+        None,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Scan failed: {e}");
+            return 1;
+        }
+    };
+
+    let snapshot = &result.snapshot;
+    let health = metrics::compute_health(snapshot);
+    println!("{}", metrics_json(snapshot, &health, with_edges));
+    0
+}
+
+fn metrics_json(
+    snapshot: &core::snapshot::Snapshot,
+    health: &metrics::HealthReport,
+    with_edges: bool,
+) -> String {
+    use core::path_utils::module_of;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut edges: BTreeSet<(&str, &str)> = BTreeSet::new();
+    for e in snapshot.import_graph.iter().filter(|e| !metrics::types::is_mod_declaration_edge(e)) {
+        edges.insert((e.from_file.as_str(), e.to_file.as_str()));
+    }
+    for e in &snapshot.call_graph {
+        edges.insert((e.from_file.as_str(), e.to_file.as_str()));
+    }
+
+    let files = core::snapshot::flatten_files_ref(&snapshot.root);
+    let mut module_files: BTreeMap<&str, usize> = BTreeMap::new();
+    for f in files.iter().filter(|f| !f.is_dir && !f.lang.is_empty()) {
+        *module_files.entry(module_of(&f.path)).or_default() += 1;
+    }
+    for &(from, to) in &edges {
+        module_files.entry(module_of(from)).or_default();
+        module_files.entry(module_of(to)).or_default();
+    }
+    let intra = edges.iter().filter(|(a, b)| module_of(a) == module_of(b)).count();
+
+    let raw = &health.root_cause_raw;
+    let s = &health.root_cause_scores;
+    let mut doc = serde_json::json!({
+        "quality": health.quality_signal,
+        "scores": {
+            "modularity": s.modularity,
+            "acyclicity": s.acyclicity,
+            "depth": s.depth,
+            "equality": s.equality,
+            "redundancy": s.redundancy,
+        },
+        "raw": {
+            "modularity_q": raw.modularity_q,
+            "cycle_count": raw.cycle_count,
+            "max_depth": raw.max_depth,
+            "complexity_gini": raw.complexity_gini,
+            "redundancy_ratio": raw.redundancy_ratio,
+        },
+        "graph": {
+            "files": snapshot.total_files,
+            "modules": module_files.len(),
+            "edges": edges.len(),
+            "intra_module_edges": intra,
+        },
+        "module_files": module_files,
+        "cycles": health.circular_dep_files,
+        "god_files": health.god_files.iter()
+            .map(|f| serde_json::json!({ "path": f.path, "fan_out": f.value }))
+            .collect::<Vec<_>>(),
+        "dead_functions": health.dead_functions.iter()
+            .map(|f| serde_json::json!({ "file": f.file, "func": f.func }))
+            .collect::<Vec<_>>(),
+        "duplicate_groups": health.duplicate_groups.iter()
+            .map(|g| g.instances.iter()
+                .map(|(file, func, _)| serde_json::json!({ "file": file, "func": func }))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+    });
+    if with_edges {
+        doc["edges"] = edges.iter()
+            .map(|(a, b)| serde_json::json!({
+                "from": a, "to": b, "from_module": module_of(a), "to_module": module_of(b),
+            }))
+            .collect::<Vec<_>>()
+            .into();
+    }
+    serde_json::to_string_pretty(&doc).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
